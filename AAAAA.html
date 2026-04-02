@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>바론 입찰관리 시스템 - 실데이터 반영본</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+        .chart-container { position: relative; height: 180px; width: 100%; }
+        th { white-space: nowrap; background-color: #f1f5f9; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="min-h-screen flex flex-col">
+        <header class="bg-white border-b px-8 py-4 shadow-sm">
+            <div class="max-w-[1800px] mx-auto flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-bold text-blue-900">경영기획팀 입찰관리 대시보드</h1>
+                    <p class="text-xs text-slate-500 font-medium italic">22건 전수 데이터 로드 완료</p>
+                </div>
+                <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold transition shadow-md">
+                    + 신규 입찰 등록
+                </button>
+            </div>
+        </header>
+
+        <main class="p-6 max-w-[1800px] mx-auto w-full space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="font-bold text-slate-700 text-sm mb-3">참여 결과 비중</h3>
+                    <div class="chart-container"><canvas id="pieChart"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="font-bold text-slate-700 text-sm mb-3">월별 바론 지분 (단위: 억)</h3>
+                    <div class="chart-container"><canvas id="barChart"></canvas></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col justify-center">
+                        <span class="text-blue-600 text-[11px] font-bold">총 참여 지분액</span>
+                        <h2 class="text-xl font-black text-blue-900 mt-1" id="total-amount">0원</h2>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-2xl border border-green-100 flex flex-col justify-center">
+                        <span class="text-green-600 text-[11px] font-bold">참여 건수</span>
+                        <h2 class="text-xl font-black text-green-900 mt-1" id="total-count">0건</h2>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center">
+                        <span class="text-slate-500 text-[11px] font-bold">타사 낙찰</span>
+                        <h2 class="text-xl font-black text-slate-700 mt-1" id="lose-count">0건</h2>
+                    </div>
+                    <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex flex-col justify-center">
+                        <span class="text-amber-600 text-[11px] font-bold">불참 건수</span>
+                        <h2 class="text-xl font-black text-amber-700 mt-1" id="skip-count">0건</h2>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                    <h3 class="font-bold text-slate-700">입찰 참여 상세 내역</h3>
+                    <input type="text" id="search" onkeyup="renderAll()" placeholder="용역명, 발주처 검색..." class="text-sm border border-slate-200 rounded-xl px-4 py-2 w-80 outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="overflow-x-auto max-h-[600px]">
+                    <table class="w-full text-left border-collapse text-[11px]">
+                        <thead class="sticky top-0 z-10 shadow-sm font-bold text-slate-500">
+                            <tr>
+                                <th class="px-4 py-3">공고일</th>
+                                <th class="px-4 py-3">등록마감일</th>
+                                <th class="px-4 py-3">개찰일시</th>
+                                <th class="px-4 py-3">순위</th>
+                                <th class="px-4 py-3">발주처</th>
+                                <th class="px-4 py-3 min-w-[200px]">용역명</th>
+                                <th class="px-4 py-3">지분금액(원)</th>
+                                <th class="px-4 py-3">결과</th>
+                                <th class="px-4 py-3">낙찰사</th>
+                                <th class="px-4 py-3">참여사 구성</th>
+                                <th class="px-4 py-3 text-center">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTable" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <h3 id="modalTitle" class="text-xl font-bold mb-6">입찰 데이터 관리</h3>
+            <form id="bidForm" class="grid grid-cols-2 gap-4">
+                <input type="hidden" id="edit-id">
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">공고일</label><input type="text" id="m_post_date" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">등록마감일</label><input type="text" id="m_date" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">개찰일시</label><input type="text" id="m_open_date" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">순위</label><input type="text" id="m_rank" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-2"><label class="block text-[10px] font-bold text-slate-400">발주처</label><input type="text" id="m_client" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-2"><label class="block text-[10px] font-bold text-slate-400">용역명</label><input type="text" id="m_title" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">지분금액</label><input type="number" id="m_amount" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">결과</label><input type="text" id="m_result" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">낙찰사</label><input type="text" id="m_winner" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-1"><label class="block text-[10px] font-bold text-slate-400">참여사 구성</label><input type="text" id="m_partners" class="w-full border p-2 rounded-lg text-sm"></div>
+                <div class="col-span-2 flex gap-2 mt-4">
+                    <button type="button" onclick="closeModal()" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold">취소</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // CSV 파일의 22건 전체 데이터를 배열에 정확히 매칭했습니다.
+        const initialData = [
+            { id: 1, postDate: '2025-12-31', date: '2026-01-13', openDate: '2026-02-12', rank: '14위', client: '연천군맑은물관리사업소', title: '청산배수지건설공사기본및실시설계용역', amount: 73384542, result: '타사낙찰', winner: '동명', partners: '삼안:한맥:바론:경수' },
+            { id: 2, postDate: '2025-12-30', date: '2026-01-06', openDate: '-', rank: '-', client: '경기도 포천시', title: '포천천 인도교 설치사업 기본 및 실시설계 용역', amount: 13824580, result: '불참', winner: '-', partners: '삼안 : XX : 바론 : XX' },
+            { id: 3, postDate: '2025-12-30', date: '2026-01-06', openDate: '2026-01-07(11시)', rank: '22위', client: '경기도 김포시', title: '하성농어촌도로리도207호선개설사업기본및실시설계용역', amount: 138988300, result: '타사낙찰', winner: '경동', partners: '삼안:주하:바론:에스피' },
+            { id: 4, postDate: '2026-01-05', date: '2026-01-20', openDate: '2026-02-27(11시)', rank: '21위', client: '경상남도 진주시', title: '진주시 나불지구 풍수해생활권 종합정비사업 기본 및 실시설계', amount: 419903300, result: '타사낙찰', winner: '유신', partners: '한맥+혜인+바론+세경' },
+            { id: 5, postDate: '2026-01-07', date: '2026-01-19', openDate: '2026-02-12(11시)', rank: '10위', client: '양평군환경사업소', title: '양평군 노후하수관로 정비사업 실시설계 용역', amount: 213023041, result: '타사낙찰', winner: '이산', partners: '삼안:다산:바론' },
+            { id: 6, postDate: '2025-12-30', date: '2026-01-16', openDate: '2026-02-12(13시)', rank: '2위', client: '금강유역환경청', title: '금강 하천시설 유지보수 실시설계용역(‘26~’28년)', amount: 74500000, result: '타사낙찰', winner: '도화', partners: '삼안:한맥:바론' },
+            { id: 7, postDate: '2026-02-09', date: '-', openDate: '-', rank: '-', client: '서울특별시', title: '탄천.한강변차집관로정비공사기본및실시설계용역(협상)', amount: 0, result: '불참', winner: '-', partners: '0' },
+            { id: 8, postDate: '2026-01-28', date: '2026-02-06', openDate: '2026-02-09 (11시)', rank: '16위', client: '경기도 파주시', title: '수내천(소하천)정비사업 기본 및 실시설계옹역', amount: 73575600, result: '타사낙찰', winner: '건일', partners: '삼안:한맥:바론:GSTA' },
+            { id: 9, postDate: '2026-02-20', date: '2026-03-05', openDate: '-', rank: '-', client: '구례군', title: '구례군 소하천정비종합계획수립 및 지형도면신고시 용역', amount: 0, result: '불참', winner: '-', partners: '한맥 : XX : 바론 : XX' },
+            { id: 10, postDate: '2026-02-26', date: '2026-03-04', openDate: '2026-03-05 (15시)', rank: '-', client: '경기도청북부청사', title: '경기북부양생동물 생태관찰원조성사업기본및실시설계용역', amount: 32087000, result: '타사낙찰', winner: '도화', partners: '삼안 : 75.7 : 바론 : 10' },
+            { id: 11, postDate: '2026-01-13', date: '2026-01-26', openDate: '-', rank: '-', client: '평택시', title: '평택시통복천생태하천복원실시설계용역(장기계속계약)', amount: 147096500, result: '-', winner: '-', partners: '삼안:한맥:바론:에스피' },
+            { id: 12, postDate: '2026-02-02', date: '2026-02-13', openDate: '-', rank: '-', client: '안양시', title: '안양시분류식하수관로및노후하수관로정비공사기본및실시설계용역', amount: 87369568, result: '-', winner: '-', partners: '삼안:태조:바론:GSTA' },
+            { id: 13, postDate: '2026-02-05', date: '2026-02-25', openDate: '-', rank: '-', client: '용인특례시', title: '왕산.갈담자연재해위험개선지구정비사업기본및실시설계용역', amount: 187304000, result: '-', winner: '-', partners: '삼안:한맥:바론:GSTA' },
+            { id: 14, postDate: '2026-02-05', date: '2026-02-20', openDate: '-', rank: '-', client: '파주시', title: '파주시소하천정비종합계획재수립용역', amount: 730908000, result: '-', winner: '-', partners: '삼안:한맥:바론' },
+            { id: 15, postDate: '2026-02-10', date: '2026-02-24', openDate: '-', rank: '-', client: '경기도광주시', title: '초월지구풍수해생활권종합정비사업기본및실시설계용역', amount: 124457048, result: '-', winner: '-', partners: '삼안:한맥:바론:에스피' },
+            { id: 16, postDate: '2026-02-10', date: '2026-02-24', openDate: '-', rank: '-', client: '평택시상하수도사업소', title: '평택시북부지역노후상수관망정비사업기본및실시설계용역', amount: 235800000, result: '-', winner: '-', partners: '삼안:바론=분담' },
+            { id: 17, postDate: '2026-02-11', date: '2026-02-25', openDate: '-', rank: '-', client: '안양시', title: '안양시 노후상수관망정비사업실시설계용역', amount: 214975347, result: '-', winner: '-', partners: '삼안:태조:바론:에스피' },
+            { id: 18, postDate: '2026-02-26', date: '2026-03-10', openDate: '3월 중', rank: '-', client: '김해시', title: '김해시 소하천 정비종합계획 재수립 및 지형도면고시용역', amount: 625616320, result: '-', winner: '-', partners: '한맥 : XX : 바론 : XX' },
+            { id: 19, postDate: '2026-02-27', date: '2026-03-10', openDate: '3월 중', rank: '-', client: '홍성군', title: '충남 어사 자연재해위험개선지구 정비사업 기본 및 실시설계', amount: 119743911, result: '-', winner: '-', partners: '한맥 : XX : 바론 : XX' },
+            { id: 20, postDate: '2026-03-03', date: '2026-03-13', openDate: '3월 중', rank: '-', client: '함안군', title: '유동 자연재해위험개선지구 정비사업 기본 및 실시설계용역', amount: 64688400, result: '-', winner: '-', partners: '한맥 : XX : 바론 : XX' },
+            { id: 21, postDate: '2026-02-24', date: '2026-03-10', openDate: '3월 중', rank: '-', client: '양평군환경사업소', title: '국수 공공하수처리시설 증설사업 기본 및 실시설계 용역', amount: 5946600, result: '-', winner: '-', partners: '삼안:한맥:바론' },
+            { id: 22, postDate: '2026-03-10', date: '2026-03-25', openDate: '미정', rank: '-', client: '세종특별자치시', title: '세종 스마트 국가산단 진입도로 건설공사 기본 및 실시설계용역', amount: 104850000, result: '-', winner: '-', partners: '한맥:바론:XX지질' }
+        ];
+
+        let bids = JSON.parse(localStorage.getItem('baron_v4_bids')) || initialData;
+        let pChart, bChart;
+
+        function renderAll() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const filtered = bids.filter(b => b.title.toLowerCase().includes(query) || b.client.toLowerCase().includes(query));
+            renderTable(filtered);
+            renderStats(filtered);
+            renderCharts(filtered);
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('dataTable');
+            tbody.innerHTML = data.map(b => `
+                <tr class="hover:bg-slate-50 border-b border-slate-50 transition-colors">
+                    <td class="px-4 py-3 font-mono text-slate-400">${b.postDate}</td>
+                    <td class="px-4 py-3 font-mono text-slate-400 font-bold">${b.date}</td>
+                    <td class="px-4 py-3 font-mono text-slate-400">${b.openDate}</td>
+                    <td class="px-4 py-3 font-bold text-slate-500">${b.rank}</td>
+                    <td class="px-4 py-3 font-bold text-slate-700">${b.client}</td>
+                    <td class="px-4 py-3 text-slate-600 leading-tight">${b.title}</td>
+                    <td class="px-4 py-3 font-black text-slate-800">${b.amount.toLocaleString()}</td>
+                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full font-bold ${getBadge(b.result)}">${b.result || '진행'}</span></td>
+                    <td class="px-4 py-3 text-blue-700 font-black">${b.winner}</td>
+                    <td class="px-4 py-3 text-[10px] text-slate-400">${b.partners}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="editBid(${b.id})" class="text-blue-500 hover:underline mr-1">수정</button>
+                        <button onclick="deleteBid(${b.id})" class="text-red-400 hover:underline">삭제</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getBadge(res) {
+            if(res === '낙찰') return 'bg-green-100 text-green-700';
+            if(res === '타사낙찰') return 'bg-red-100 text-red-700';
+            if(res === '불참') return 'bg-amber-100 text-amber-700';
+            return 'bg-blue-100 text-blue-700';
+        }
+
+        function renderStats(data) {
+            const totalAmt = data.reduce((sum, b) => sum + b.amount, 0);
+            document.getElementById('total-amount').innerText = (totalAmt / 100000000).toFixed(2) + '억 원';
+            document.getElementById('total-count').innerText = data.length + '건';
+            document.getElementById('lose-count').innerText = data.filter(b => b.result === '타사낙찰').length + '건';
+            document.getElementById('skip-count').innerText = data.filter(b => b.result === '불참').length + '건';
+        }
+
+        function renderCharts(data) {
+            const counts = data.reduce((acc, b) => { let r = b.result || '진행'; acc[r] = (acc[r] || 0) + 1; return acc; }, {});
+            if(pChart) pChart.destroy();
+            pChart = new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981'] }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } }
+            });
+
+            const monthly = [0, 0, 0, 0];
+            data.forEach(b => {
+                const m = new Date(b.date).getMonth();
+                if(m < 4) monthly[m] += b.amount / 100000000;
+            });
+            if(bChart) bChart.destroy();
+            bChart = new Chart(document.getElementById('barChart'), {
+                type: 'bar',
+                data: { labels: ['1월', '2월', '3월', '4월'], datasets: [{ label: '지분 총액', data: monthly, backgroundColor: '#1e40af' }] },
+                options: { maintainAspectRatio: false }
+            });
+        }
+
+        function openModal(id = null) {
+            document.getElementById('modal').classList.remove('hidden');
+            if(id) {
+                const b = bids.find(x => x.id === id);
+                document.getElementById('edit-id').value = b.id;
+                document.getElementById('m_post_date').value = b.postDate;
+                document.getElementById('m_date').value = b.date;
+                document.getElementById('m_open_date').value = b.openDate;
+                document.getElementById('m_rank').value = b.rank;
+                document.getElementById('m_client').value = b.client;
+                document.getElementById('m_title').value = b.title;
+                document.getElementById('m_amount').value = b.amount;
+                document.getElementById('m_result').value = b.result;
+                document.getElementById('m_winner').value = b.winner;
+                document.getElementById('m_partners').value = b.partners;
+            } else {
+                document.getElementById('bidForm').reset();
+                document.getElementById('edit-id').value = "";
+            }
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        document.getElementById('bidForm').onsubmit = function(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const newData = {
+                id: id ? parseInt(id) : Date.now(),
+                postDate: document.getElementById('m_post_date').value,
+                date: document.getElementById('m_date').value,
+                openDate: document.getElementById('m_open_date').value,
+                rank: document.getElementById('m_rank').value,
+                client: document.getElementById('m_client').value,
+                title: document.getElementById('m_title').value,
+                amount: parseInt(document.getElementById('m_amount').value),
+                result: document.getElementById('m_result').value,
+                winner: document.getElementById('m_winner').value,
+                partners: document.getElementById('m_partners').value
+            };
+            if(id) bids[bids.findIndex(x => x.id === parseInt(id))] = newData;
+            else bids.unshift(newData);
+            localStorage.setItem('baron_v4_bids', JSON.stringify(bids));
+            renderAll(); closeModal();
+        };
+
+        function deleteBid(id) { if(confirm('삭제?')) { bids = bids.filter(x => x.id !== id); localStorage.setItem('baron_v4_bids', JSON.stringify(bids)); renderAll(); } }
+        function editBid(id) { openModal(id); }
+
+        window.onload = renderAll;
+    </script>
+</body>
+</html>
